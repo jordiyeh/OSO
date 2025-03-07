@@ -60,6 +60,13 @@
         .cell:hover {
             background-color: #f0f0f0;
         }
+        .selected {
+            background-color: #ffff99;
+        }
+        .strikethrough {
+            text-decoration: line-through;
+            background-color: #90ee90;
+        }
         .ad-space {
             margin: 20px 0;
             width: 100%;
@@ -89,16 +96,17 @@
         <h1>OSO Game</h1>
         
         <div class="controls">
-            <label>Grid Size: 
-                <input type="number" id="gridSize" value="50" min="10" max="100">
-            </label>
+            <label>Width: <input type="number" id="gridWidth" value="30" min="10" max="100"></label>
+            <label>Height: <input type="number" id="gridHeight" value="40" min="10" max="100"></label>
             <button onclick="resetGame()">Reset Game</button>
-            <span>Current Player: <span id="currentPlayer">Player 1 (O)</span></span>
+            <button onclick="endTurn()">End Turn</button>
+            <button onclick="strikeOSO()">Strike OSO</button>
+            <span>Current Player: <span id="currentPlayer">Player 1</span></span>
         </div>
 
         <div class="scoreboard">
-            <div>Player 1 (O): <span id="score1">0</span></div>
-            <div>Player 2 (S): <span id="score2">0</span></div>
+            <div>Player 1: <span id="score1">0</span></div>
+            <div>Player 2: <span id="score2">0</span></div>
         </div>
 
         <div id="gameGrid" class="game-grid"></div>
@@ -109,75 +117,108 @@
     </div>
 
     <script>
-        let gridSize = 50;
+        let gridWidth = 30;
+        let gridHeight = 40;
         let currentPlayer = 1;
         let scores = [0, 0];
         let grid = [];
+        let selectedCells = [];
 
         function initializeGrid() {
+            gridWidth = parseInt(document.getElementById('gridWidth').value) || 30;
+            gridHeight = parseInt(document.getElementById('gridHeight').value) || 40;
             const gameGrid = document.getElementById('gameGrid');
-            gameGrid.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+            gameGrid.style.gridTemplateColumns = `repeat(${gridWidth}, 1fr)`;
             gameGrid.innerHTML = '';
-            grid = Array(gridSize).fill().map(() => Array(gridSize).fill(''));
+            grid = Array(gridHeight).fill().map(() => Array(gridWidth).fill(''));
 
-            for (let i = 0; i < gridSize; i++) {
-                for (let j = 0; j < gridSize; j++) {
+            for (let i = 0; i < gridHeight; i++) {
+                for (let j = 0; j < gridWidth; j++) {
                     const cell = document.createElement('button');
                     cell.className = 'cell';
-                    cell.addEventListener('click', () => placeLetter(i, j));
+                    cell.addEventListener('click', () => handleCellClick(i, j));
                     gameGrid.appendChild(cell);
                 }
             }
         }
 
-        function placeLetter(row, col) {
-            if (grid[row][col] !== '') return;
+        function handleCellClick(row, col) {
+            const cell = getCell(row, col);
+            if (!cell.textContent) {
+                // Place letter
+                const letter = prompt("Enter 'O' or 'S':").toUpperCase();
+                if (letter === 'O' || letter === 'S') {
+                    grid[row][col] = letter;
+                    cell.textContent = letter;
+                }
+            } else {
+                // Select for striking
+                toggleSelection(row, col);
+            }
+        }
 
-            const letter = currentPlayer === 1 ? 'O' : 'S';
-            grid[row][col] = letter;
-            updateCell(row, col, letter);
-            checkForOSO(row, col);
-            
+        function toggleSelection(row, col) {
+            const index = row * gridWidth + col;
+            const cell = document.getElementsByClassName('cell')[index];
+            if (cell.classList.contains('selected')) {
+                cell.classList.remove('selected');
+                selectedCells = selectedCells.filter(([r, c]) => r !== row || c !== col);
+            } else {
+                cell.classList.add('selected');
+                selectedCells.push([row, col]);
+            }
+        }
+
+        function strikeOSO() {
+            if (selectedCells.length !== 3) {
+                alert("Select exactly 3 cells to form 'OSO'");
+                return;
+            }
+
+            selectedCells.sort(([r1, c1], [r2, c2]) => (r1 - r2) || (c1 - c2));
+            const [r1, c1] = selectedCells[0];
+            const [r2, c2] = selectedCells[1];
+            const [r3, c3] = selectedCells[2];
+
+            // Check if it's a valid line (horizontal, vertical, or diagonal)
+            const isHorizontal = r1 === r2 && r2 === r3 && c3 - c1 === 2;
+            const isVertical = c1 === c2 && c2 === c3 && r3 - r1 === 2;
+            const isDiagonal = Math.abs(r3 - r1) === 2 && Math.abs(c3 - c1) === 2 && r2 === (r1 + r3) / 2 && c2 === (c1 + c3) / 2;
+
+            if (!(isHorizontal || isVertical || isDiagonal)) {
+                alert("Selected cells must form a straight line!");
+                return;
+            }
+
+            // Check if it forms 'OSO'
+            const letters = [grid[r1][c1], grid[r2][c2], grid[r3][c3]].join('');
+            if (letters === 'OSO') {
+                scores[currentPlayer - 1]++;
+                updateScoreboard();
+                selectedCells.forEach(([r, c]) => {
+                    getCell(r, c).classList.add('strikethrough');
+                    getCell(r, c).classList.remove('selected');
+                });
+                alert(`Player ${currentPlayer} scored a point!`);
+            } else {
+                alert("Selected pattern is not 'OSO'!");
+            }
+            clearSelection();
+        }
+
+        function getCell(row, col) {
+            return document.getElementsByClassName('cell')[row * gridWidth + col];
+        }
+
+        function clearSelection() {
+            selectedCells.forEach(([r, c]) => getCell(r, c).classList.remove('selected'));
+            selectedCells = [];
+        }
+
+        function endTurn() {
+            clearSelection();
             currentPlayer = currentPlayer === 1 ? 2 : 1;
-            document.getElementById('currentPlayer').textContent = 
-                `Player ${currentPlayer} (${currentPlayer === 1 ? 'O' : 'S'})`;
-        }
-
-        function updateCell(row, col, letter) {
-            const index = row * gridSize + col;
-            document.getElementsByClassName('cell')[index].textContent = letter;
-        }
-
-        function checkForOSO(row, col) {
-            const directions = [
-                [-1, 0], [1, 0], [0, -1], [0, 1], // vertical, horizontal
-                [-1, -1], [1, 1], [-1, 1], [1, -1] // diagonals
-            ];
-
-            for (let [dr, dc] of directions) {
-                if (checkDirection(row, col, dr, dc)) {
-                    scores[currentPlayer - 1]++;
-                    updateScoreboard();
-                }
-            }
-        }
-
-        function checkDirection(row, col, dr, dc) {
-            const pattern = 'OSO';
-            for (let i = -1; i <= 1; i++) {
-                let match = true;
-                for (let j = 0; j < 3; j++) {
-                    const r = row + (i + j) * dr;
-                    const c = col + (i + j) * dc;
-                    if (r < 0 || r >= gridSize || c < 0 || c >= gridSize || 
-                        grid[r][c] !== pattern[j]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) return true;
-            }
-            return false;
+            document.getElementById('currentPlayer').textContent = `Player ${currentPlayer}`;
         }
 
         function updateScoreboard() {
@@ -186,10 +227,11 @@
         }
 
         function resetGame() {
-            gridSize = parseInt(document.getElementById('gridSize').value) || 50;
+            gridWidth = parseInt(document.getElementById('gridWidth').value) || 30;
+            gridHeight = parseInt(document.getElementById('gridHeight').value) || 40;
             currentPlayer = 1;
             scores = [0, 0];
-            document.getElementById('currentPlayer').textContent = 'Player 1 (O)';
+            document.getElementById('currentPlayer').textContent = 'Player 1';
             updateScoreboard();
             initializeGrid();
         }
